@@ -9,6 +9,7 @@ from users.models import User, ClientProfile
 from users.serializers import (
     RegisterSerializer, UserSerializer, ClientProfileSerializer, GoogleLoginSerializer
 )
+from rest_framework.decorators import action
 
 
 class GoogleLogin(SocialLoginView):
@@ -39,10 +40,37 @@ class CustomRegisterView(RegisterView):
         return UserSerializer(user).data
 
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
+class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+
+    @action(detail=False, methods=['get'], url_path='whoami')
+    def whoami(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        user_data = UserSerializer(user).data
+    
+    # Check if user has a profile
+        try:
+            profile =ClientProfile.objects.get(user=user)
+            profile = ClientProfileSerializer(profile).data
+        except ClientProfile.DoesNotExist:
+            profile = None
+        
+        # Combine user data with profile
+        response_data = {
+            "user": user_data,
+            "profile": profile
+        }
+        
+        return Response(response_data) 
+    
+    
+
 
 
 class ClientProfileViewSet(viewsets.ModelViewSet):

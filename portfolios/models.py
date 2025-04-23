@@ -9,6 +9,7 @@ class Portfolio(models.Model):
     risk_level = models.CharField(max_length=20)
     target_return = models.FloatField()
     notes = models.TextField(blank=True)
+    
 
 class PortfolioAsset(models.Model):
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name='assets')

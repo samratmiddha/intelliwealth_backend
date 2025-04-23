@@ -19,26 +19,29 @@ class AssetViewSet(viewsets.ModelViewSet):
         if asset.asset_type != 'stock':
             return Response({"error": "Asset type is not stock"}, status=status.HTTP_400_BAD_REQUEST)
         
-        ticker = asset.symbol
-        question = f"{ticker} Financial Report"
-        
-        try:
-            data = get_stock_data(ticker, API_KEY)
-            if not data or not any(data.values()):
-                return Response(
-                    {"error": f"No data found for ticker {ticker}"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            df = prepare_financial_data(data)
-            # Persist the transformed financial data to the asset's data field
-            asset.data = df.to_dict(orient="records")[0]
-            asset.save()
+        if asset.data:
+            return Response({"result": asset.data}, status=status.HTTP_200_OK)
+        else:
+            ticker = asset.symbol
+            question = f"{ticker} Financial Report"
             
-            result = run_langchain_query(df, question)
-            return Response({"result": result}, status=status.HTTP_200_OK)
-        except Exception as e:
-            import traceback
-            return Response(
-                {"error": str(e), "trace": traceback.format_exc()},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            try:
+                data = get_stock_data(ticker, API_KEY)
+                if not data or not any(data.values()):
+                    return Response(
+                        {"error": f"No data found for ticker {ticker}"},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                df = prepare_financial_data(data)
+                # Persist the transformed financial data to the asset's data field
+                asset.data = df.to_dict(orient="records")[0]
+                asset.save()
+                
+                result = run_langchain_query(df, question)
+                return Response({"result": result}, status=status.HTTP_200_OK)
+            except Exception as e:
+                import traceback
+                return Response(
+                    {"error": str(e), "trace": traceback.format_exc()},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )

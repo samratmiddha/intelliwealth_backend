@@ -1,14 +1,24 @@
-
 import os
-import io
-from scipy.optimize import minimize, Bounds
+import base64
+import io 
+from scipy.optimize import minimize, Bounds, LinearConstraint
 from numpy.linalg import norm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import timedelta
 from dateutil.parser import parse
 import math
+
+# For GARCH volatility prediction
+try:
+    from arch import arch_model
+except ImportError:
+    print("Warning: arch module not found. GARCH volatility prediction will not be available.")
+    # Define a placeholder to avoid errors if arch is not installed
+    def arch_model(*args, **kwargs):
+        raise ImportError("arch module not installed. Install with: pip install arch")
 
 # Get the directory where this file lives
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -82,7 +92,7 @@ def scipy_opt(predicted_returns, actual_returns, lam1, lam2):
     w = sol.x
     predicted_port_return = w.dot(mu)
     portfolio_std = w.T.dot(cov).dot(w)
-    actual_port_return, actual_port_variance = actual_return(PCA_Actual_Returns, w)
+    actual_port_return, actual_port_variance = actual_return(actual_returns, w)
     sharpe_ratio = actual_port_return / np.sqrt(actual_port_variance)
     return {
         'weights': w,
@@ -122,16 +132,99 @@ def plot_equity_curve(equity_series, timestamps):
     plt.close(fig)
     return base64.b64encode(img_bytes).decode()
 
-def predict_portfolio(lookback, horizon, initial_equity):
+# New function: GARCH for volatility prediction
+def forecast_portfolio_volatility(prices_df, weights_dict):
+    """
+    Forecast portfolio volatility using GARCH model.
+    
+    Args:
+        prices_df: DataFrame of asset prices
+        weights_dict: Dictionary mapping asset names to weights
+        
+    Returns:
+        Dict with portfolio volatility and individual asset volatilities
+    """
+    try:
+        # Filter for assets in weights dictionary
+        tickers = [t for t in weights_dict.keys() if t in prices_df.columns]
+        price_df = prices_df[tickers].copy()
+        
+        # Calculate log returns
+        log_returns = np.log(price_df / price_df.shift(1)).dropna()
+        
+        # Normalize weights
+        total_weight = sum(weights_dict[t] for t in tickers)
+        weight_vector = np.array([weights_dict[t] / total_weight for t in tickers])
+        
+        # GARCH forecast for each ticker
+        forecasted_vols = []
+        individual_vols = {}
+        
+        for i, ticker in enumerate(tickers):
+            returns = log_returns[ticker] * 100  # GARCH works better with percentage scale
+            model = arch_model(returns, vol='GARCH', p=1, q=1)  # Simplified p,q parameters
+            res = model.fit(disp='off')
+            forecast = res.forecast(horizon=1)
+            sigma = np.sqrt(forecast.variance.values[-1][0]) / 100  # Back to raw scale
+            forecasted_vols.append(sigma)
+            individual_vols[ticker] = sigma
+        
+        # Correlation matrix from historical returns
+        correlation_matrix = log_returns.corr().values
+        
+        # Construct forecasted covariance matrix
+        forecasted_vol_matrix = np.outer(forecasted_vols, forecasted_vols)
+        forecasted_cov_matrix = forecasted_vol_matrix * correlation_matrix
+        
+        # Calculate portfolio volatility
+        portfolio_variance = weight_vector.T @ forecasted_cov_matrix @ weight_vector
+        portfolio_volatility = np.sqrt(portfolio_variance)
+        
+        return {
+            "portfolio_volatility": portfolio_volatility,
+            "individual_vols": individual_vols
+        }
+    except Exception as e:
+        print(f"Error in forecast_portfolio_volatility: {str(e)}")
+        return {
+            "portfolio_volatility": None,
+            "individual_vols": {}
+        }
+
+def predict_portfolio(lookback, horizon, initial_equity, tickers=None):
+    """
+    Predict portfolio performance.
+    
+    Args:
+        lookback: Lookback period in months
+        horizon: Forecast horizon in months
+        initial_equity: Initial portfolio value
+        tickers: List of tickers to include (filters the universe)
+        
+    Returns:
+        Dict with portfolio metrics and forecasts
+    """
     if lookback <= 0 or horizon <= 0 or initial_equity <= 0:
         raise ValueError("Parameters must be positive values")
-    pred_windows, pred_horizons = windowGenerator(PCA_Predicted_Returns, lookback, 1, 1)
-    act_windows, act_horizons = windowGenerator(PCA_Actual_Returns, lookback, 1, 1)
+    
+    # Filter the data for selected tickers if provided
+    if tickers and len(tickers) > 0:
+        filtered_predicted_returns = PCA_Predicted_Returns[tickers]
+        filtered_actual_returns = PCA_Actual_Returns[tickers]
+    else:
+        filtered_predicted_returns = PCA_Predicted_Returns
+        filtered_actual_returns = PCA_Actual_Returns
+    
+    pred_windows, pred_horizons = windowGenerator(filtered_predicted_returns, lookback, 1, 1)
+    act_windows, act_horizons = windowGenerator(filtered_actual_returns, lookback, 1, 1)
+    
     if len(act_horizons) < horizon:
         raise ValueError(f"Not enough data for the specified horizon. Maximum horizon available is: {len(act_horizons)}")
+    
     start = len(act_horizons) - horizon
     returns, variance, sharperatio, timestamps, equity = [], [], [], [], [initial_equity]
     weights_history = []
+    
     for i in range(start, start + horizon):
         r = scipy_opt(pred_horizons[i], act_horizons[i], 0.5, 2)
         returns.append(r['actual_returns'])
@@ -141,19 +234,43 @@ def predict_portfolio(lookback, horizon, initial_equity):
         equity.append(equity[-1] * math.exp(r['actual_returns']))
         weights_history.append(r['weights'])
         print(i, "complete")
+    
     returns_series = pd.Series(returns)
     performance_metrics = metrics(returns_series)
+    
+    # Create the equity curve graph
     graph = plot_equity_curve(equity[1:], timestamps)
     final_equity = equity[-1]
-    asset_names = PCA_Actual_Returns.columns.tolist()
+    
+    # Get the asset names we're working with (filtered or all)
+    asset_names = filtered_actual_returns.columns.tolist()
+    
+    # Format the weights history
     formatted_weights = []
     for period_weights in weights_history:
         period_dict = {}
         for j, asset in enumerate(asset_names):
-            if period_weights[j] > 0.01:
+            if period_weights[j] > 0.01:  # Only include significant weights
                 period_dict[asset] = round(period_weights[j] * 100, 2)
         formatted_weights.append(period_dict)
-    return {
+    
+    # Get the final weights dictionary for volatility forecasting
+    final_weights_dict = {asset_names[j]: weights_history[-1][j] for j in range(len(asset_names))}
+    
+    # Forecast volatility using GARCH if available
+    vol_forecast = None
+    try:
+        # Use the original price data for volatility forecasting
+        if tickers and len(tickers) > 0:
+            filtered_prices = PCA_Actual_Prices[tickers]
+        else:
+            filtered_prices = PCA_Actual_Prices
+            
+        vol_forecast = forecast_portfolio_volatility(filtered_prices, final_weights_dict)
+    except Exception as e:
+        print(f"Volatility forecasting error: {str(e)}")
+    
+    result = {
         'portfolio_returns': [round(r, 4) for r in returns],
         'equity_growth': [round(e, 2) for e in equity[1:]],
         'final_equity': round(final_equity, 2),
@@ -161,5 +278,13 @@ def predict_portfolio(lookback, horizon, initial_equity):
         'timestamps': [t.strftime('%Y-%m-%d') for t in timestamps],
         'equity_plot_base64': graph,
         'performance_metrics': performance_metrics,
-        'weights_history': formatted_weights
+        'weights_history': formatted_weights,
+        'final_optimal_weights': {k: round(v*100, 2) for k, v in final_weights_dict.items() if v > 0.01}
     }
+    
+    # Add volatility forecast if available
+    if vol_forecast and vol_forecast["portfolio_volatility"] is not None:
+        result['predicted_portfolio_volatility'] = round(vol_forecast["portfolio_volatility"] * 100, 4)  # As percentage
+        result['individual_volatilities'] = {k: round(v * 100, 4) for k, v in vol_forecast["individual_vols"].items()}  # As percentage
+    
+    return result

@@ -47,8 +47,8 @@ class PortfolioPredictionView(APIView):
             # Derive lookback and horizon from the user's investment horizon.
             # For example, if investment_horizon_years is 3, you might use 3 months lookback and 3 months horizon.
             # Adjust the conversion as needed.
-            lookback = profile.investment_horizon_years if profile.investment_horizon_years > 0 else 1
-            horizon = profile.investment_horizon_years if profile.investment_horizon_years > 0 else 1
+            lookback = 24
+            horizon = profile.investment_horizon_years
 
             # Use previous final equity if available; otherwise default to 10000.
             if hasattr(portfolio, 'metrics') and portfolio.metrics.final_equity:

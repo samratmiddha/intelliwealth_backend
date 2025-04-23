@@ -40,19 +40,19 @@ class ClientProfile(models.Model):
     (4, 'Expert level familiarity'),
 ]
     INVESTMENT_HORIZON_CHOICES = [
-        (0, 'Less than 1 year'),
-        (1, '1 to 3 years'),
-        (2, '3 to 5 years'),
-        (3, '5 to 10 years'),
-        (4, 'More than 10 years'),
+        (12, 'Less than 1 year'),
+        (36, '1 to 3 years'),
+        (60, '3 to 5 years'),
+        (120, '5 to 10 years'),
+        (240, 'More than 10 years'),
     ]
 
     PERCANTAGE_SAVINGS_CHOICES = [
-        (0, '0-5% of Income'),
-        (1, '5-10% of Income'),
-        (2, '10-15% of Income'),
-        (3, '15-20% of Income'),
-        (4, '20%-100% of Income'),
+        (3, '0-5% of Income'),
+        (8, '5-10% of Income'),
+        (13, '10-15% of Income'),
+        (17, '15-20% of Income'),
+        (50, '20%-100% of Income'),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     risk_tolerance = models.CharField(max_length=20, choices=[
@@ -60,7 +60,7 @@ class ClientProfile(models.Model):
         ('medium', 'Medium'),
         ('high', 'High')
     ])
-    investment_horizon_years = models.IntegerField(choices=INVESTMENT_HORIZON_CHOICES)
+    investment_horizon= models.IntegerField(choices=INVESTMENT_HORIZON_CHOICES)
     primary_investment_goal=models.CharField(max_length=100,choices=INVESTMENT_GOALS_CHOICES)
     familiarity_with_market=models.IntegerField(choices=MARKET_FAMILIARITY_CHOICES)
     percentage_comforatable_savings=models.IntegerField(choices=PERCANTAGE_SAVINGS_CHOICES)
