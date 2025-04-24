@@ -33,7 +33,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class ClientProfileSerializer(serializers.ModelSerializer):
-    # user = UserSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
     risk_tolerance_display = serializers.CharField(source='get_risk_tolerance_display', read_only=True)
     investment_horizon_display = serializers.CharField(source='get_investment_horizon_display', read_only=True)
     primary_investment_goal_display = serializers.CharField(source='get_primary_investment_goal_display', read_only=True)
@@ -42,7 +42,31 @@ class ClientProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClientProfile
-        fields = '__all__'
+        fields = [
+            'id',
+            'user',
+            'risk_tolerance',
+            'risk_tolerance_display',
+            'investment_horizon',
+            'investment_horizon_display',
+            'primary_investment_goal',
+            'primary_investment_goal_display',
+            'familiarity_with_market',
+            'familiarity_with_market_display',
+            'percentage_comforatable_savings',
+            'percentage_comforatable_savings_display',
+            'age',
+            'annual_income',
+            'target_return',
+            'preferred_assets',
+            'profile_picture',
+            'phone',
+            'address',
+            'birth_date',
+            'avatar',
+            'name',
+        ]
+
 class GoogleLoginSerializer(SocialLoginSerializer):
     access_token = serializers.CharField(required=True, trim_whitespace=True)
 

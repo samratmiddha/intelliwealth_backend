@@ -55,17 +55,24 @@ class ClientProfile(models.Model):
         (50, '20%-100% of Income'),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    name = models.CharField(max_length=100, blank=True, null=True)
     risk_tolerance = models.CharField(max_length=20, choices=[
         ('low', 'Low'),
         ('medium', 'Medium'),
         ('high', 'High')
-    ])
-    investment_horizon= models.IntegerField(choices=INVESTMENT_HORIZON_CHOICES)
-    primary_investment_goal=models.CharField(max_length=100,choices=INVESTMENT_GOALS_CHOICES)
-    familiarity_with_market=models.IntegerField(choices=MARKET_FAMILIARITY_CHOICES)
-    percentage_comforatable_savings=models.IntegerField(choices=PERCANTAGE_SAVINGS_CHOICES)
-    age=models.IntegerField()
-    annual_income=models.IntegerField()
-    target_return = models.FloatField()   # in percentage
-    preferred_asset_types = models.JSONField(default=list)  # ['stocks', 'bonds']
+    ],blank=True,null=True)
+    investment_horizon= models.IntegerField(choices=INVESTMENT_HORIZON_CHOICES,blank=True,null=True)
+    primary_investment_goal=models.CharField(max_length=100,choices=INVESTMENT_GOALS_CHOICES,blank=True,null=True)
+    familiarity_with_market=models.IntegerField(choices=MARKET_FAMILIARITY_CHOICES,blank=True,null=True)
+    percentage_comforatable_savings=models.IntegerField(choices=PERCANTAGE_SAVINGS_CHOICES,blank=True,null=True)
+    age=models.IntegerField(blank=True,null=True)
+    annual_income=models.IntegerField(blank=True,null=True)
+    target_return = models.FloatField(blank=True,null=True)   # in percentage
+    preferred_assets = models.JSONField(default=list,blank=True)  # ['stocks', 'bonds']
+    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    phone = models.CharField(max_length=15, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    birth_date = models.DateField(blank=True, null=True)
+    avatar =models.IntegerField(default=0,blank=True)
+
    
