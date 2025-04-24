@@ -11,7 +11,7 @@ from users.serializers import (
 )
 from rest_framework.decorators import action
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-import requests
+from allauth.socialaccount.models import SocialAccount
 
 
 
