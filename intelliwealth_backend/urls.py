@@ -3,7 +3,7 @@ from django.contrib import admin
 from rest_framework.routers import DefaultRouter
 from users.views import UserViewSet, ClientProfileViewSet,GoogleLogin
 from portfolios.views import PortfolioViewSet, PortfolioAssetViewSet,PredictPortfolioView
-from news.views import NewsView
+from news.views import NewsView, TweetSentimentAnalysisView
 from assets.views import AssetViewSet
 from analytics.views import PredictionJobViewSet
 
@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/auth/social/', include('allauth.socialaccount.urls')),
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
     path('api/news/', NewsView.as_view(), name='news'),
+    path('api/news/sentiment/', TweetSentimentAnalysisView.as_view(), name='tweet-sentiment'),
     path('api/predict-portfolio/', PredictPortfolioView.as_view(), name='predict-portfolio'),
     
 
