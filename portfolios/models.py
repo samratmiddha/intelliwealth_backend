@@ -1,7 +1,7 @@
 from django.db import models
 from users.models import User
 from assets.models import Asset
-from portfolios.utils import PCA_Actual_Prices
+import yfinance as yf
 
 class Portfolio(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='portfolios')
@@ -24,9 +24,10 @@ class PortfolioAsset(models.Model):
     def returns(self):
         
         try:
-            price_series = PCA_Actual_Prices[self.asset.symbol].dropna()
-            if not price_series.empty:
-                current_price = float(price_series.iloc[-1])
+            stock = yf.Ticker(self.asset.symbol)
+            hist = stock.history(period="1d") 
+            if not hist.empty:
+                current_price = float(hist['Close'].iloc[-1])
             else:
                 current_price = float(self.avg_buy_price)
         except Exception:
@@ -36,12 +37,10 @@ class PortfolioAsset(models.Model):
         return None
     
 
-
 class PortfolioMetrics(models.Model):
     portfolio = models.OneToOneField(Portfolio, on_delete=models.CASCADE, related_name='metrics')
     roi = models.FloatField()
     sharpe_ratio = models.FloatField()
     annulaized_volatility = models.FloatField()
-    maximum_drawdown=models.FloatField()
     final_equity = models.FloatField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)

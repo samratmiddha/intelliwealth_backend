@@ -2,3 +2,4 @@ __pycache__/
 *.csv
 docs/
 intelliwealth_env/
+venv/

@@ -88,6 +88,9 @@ CORS_ORIGIN_WHITELIST = [
 CORS_ALLOW_METHODS = [
     'PUT', 'GET', 'HEAD', 'POST', 'DELETE', 'OPTIONS', 'PATCH',
 ]
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
 
 ROOT_URLCONF = 'intelliwealth_backend.urls'
 
@@ -124,12 +127,23 @@ REST_FRAMEWORK = {
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'intelliwealth_db',
+#         'USER': 'intelli_user',
+#         'PASSWORD': 'intelli_pass',
+#         'HOST': 'localhost',
+#         'PORT': '5432',
+#     }
+# }
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'intelliwealth_db',
-        'USER': 'intelli_user',
-        'PASSWORD': 'intelli_pass',
+        'USER': 'intelliwealth_user',
+        'PASSWORD': 'password',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -184,7 +198,8 @@ AUTHENTICATION_BACKENDS = [
 
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_LOGIN_METHODS = {'email'}
-ACCOUNT_EMAIL_REQUIRED = True
+# ACCOUNT_EMAIL_REQUIRED = True
+
 SOCIALACCOUNT_QUERY_EMAIL = True
 ACCOUNT_USER_MODEL_USERNAME_FIELD = 'username'
 ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']

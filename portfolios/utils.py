@@ -1,290 +1,345 @@
 import os
-import base64
-import io 
-from scipy.optimize import minimize, Bounds, LinearConstraint
-from numpy.linalg import norm
+import keras
+import yfinance as yf
 import pandas as pd
+from datetime import datetime, timedelta
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+from numpy.linalg import norm
 from datetime import timedelta
 from dateutil.parser import parse
 import math
 
-# For GARCH volatility prediction
-try:
-    from arch import arch_model
-except ImportError:
-    print("Warning: arch module not found. GARCH volatility prediction will not be available.")
-    # Define a placeholder to avoid errors if arch is not installed
-    def arch_model(*args, **kwargs):
-        raise ImportError("arch module not installed. Install with: pip install arch")
 
-# Get the directory where this file lives
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+# Define stock list
+stock_list = ["MMM" , "AOS" , "ABT" , "ABBV" , "ABMD" , "ACN" , "ATVI" , "ADBE" , "AAP" , "AMD" , "AES" , "AFL" , "A" , "APD" , "AKAM" , "ALK" , "ALB" , "ARE" , "ALXN" , "ALGN" , "ALLE" , "LNT" , "ALL" , "GOOGL" , "GOOG" , "MO" , "AMZN" , "AMCR" , "AEE" , "AAL" , "AEP" , "AXP" , "AIG" , "AMT" , "AWK" , "AMP" , "ABC" , "AME" , "AMGN" , "APH" , "ADI" , "ANSS" , "ANTM" , "AON" , "APA" , "AIV" , "AAPL" , "AMAT" , "APTV" , "ADM" , "ANET" , "AJG" , "AIZ" , "T" , "ATO" , "ADSK" , "ADP" , "AZO" , "AVB" , "AVY" , "BKR" , "BLL" , "BAC" , "BAX" , "BDX" ,  "BBY" , "BIO" , "BIIB" , "BLK" , "BA" , "BKNG" , "BWA" , "BXP" , "BSX" , "BMY" , "AVGO" , "BR" ,  "CHRW" , "COG" , "CDNS" , "CPB" , "COF" , "CAH" , "KMX" , "CCL" , "CARR" , "CAT" , "CBOE" , "CBRE" , "CDW" , "CE" , "CNC" , "CNP" , "CTL" , "CERN" , "CF" , "SCHW" , "CHTR" , "CVX" , "CMG" , "CB" , "CHD" , "CI" , "CINF" , "CTAS" , "CSCO" , "C" , "CFG" , "CTXS" , "CME" , "CMS" , "KO" , "CTSH" , "CL" , "CMCSA" , "CMA" , "CAG" , "CXO" , "COP" , "ED" , "STZ" , "CPRT" , "GLW" , "CTVA" , "COST" , "COTY" , "CCI" , "CSX" , "CMI" , "CVS" , "DHI" , "DHR" , "DRI" , "DVA" , "DE" , "DAL" , "XRAY" , "DVN" , "DXCM" , "FANG" , "DLR" , "DFS" , "DISCA" , "DISCK" , "DISH" , "DG" , "DLTR" , "D" , "DPZ" , "DOV" , "DOW" , "DTE" , "DUK" , "DRE" , "DD" , "DXC" , "ETFC" , "EMN" , "ETN" , "EBAY" , "ECL" , "EIX" , "EW" , "EA" , "EMR" , "ETR" , "EOG" , "EFX" , "EQIX" , "EQR" , "ESS" , "EL" , "RE" , "EVRG" , "ES" , "EXC" , "EXPE" , "EXPD" , "EXR" , "XOM" , "FFIV" , "FB" , "FAST" , "FRT" , "FDX" , "FIS" , "FITB" , "FRC" , "FE" , "FISV" , "FLT" , "FLIR" , "FLS" , "FMC" , "F" , "FTNT" , "FTV" , "FBHS" , "FOXA" , "FOX" , "BEN" , "FCX" , "GPS" , "GRMN" , "IT" , "GD" , "GE" , "GIS" , "GM" , "GPC" , "GILD" , "GPN" , "GL" , "GS" , "GWW" , "HRB" , "HAL" , "HBI" , "HIG" , "HAS" , "HCA" , "PEAK" , "HSIC" , "HES" , "HPE" , "HLT" , "HFC" , "HOLX" , "HD" , "HON" , "HRL" , "HST" , "HWM" , "HPQ" , "HUM" , "HBAN" , "HII" , "IEX" , "IDXX" , "INFO" , "ITW" , "ILMN" , "INCY" , "IR" , "INTC" , "ICE" , "IBM" , "IFF" , "IP" , "IPG" , "INTU" , "ISRG" , "IVZ" , "IPGP" , "IQV" , "IRM" , "JBHT" , "JKHY" , "J" , "SJM" , "JNJ" , "JCI" , "JPM" , "JNPR" , "KSU" , "K" , "KEY" , "KEYS" , "KMB" , "KIM" , "KMI" , "KLAC" , "KSS" , "KHC" , "KR" , "LB" , "LHX" , "LH" , "LRCX" , "LW" , "LVS" , "LEG" , "LDOS" , "LEN" , "LLY" , "LNC" , "LIN" , "LYV" , "LKQ" , "LMT" , "L" , "LOW" , "LYB" , "MTB" , "MRO" , "MPC" , "MKTX" , "MAR" , "MMC" , "MLM" , "MAS" , "MA" , "MXIM" , "MKC" , "MCD" , "MCK" , "MDT" , "MRK" , "MET" , "MTD" , "MGM" , "MCHP" , "MU" , "MSFT" , "MAA" , "MHK" , "TAP" , "MDLZ" , "MNST" , "MCO" , "MS" , "MSI" , "MSCI" , "MYL" , "NDAQ" , "NOV" , "NTAP" , "NFLX" , "NWL" , "NEM" , "NWSA" , "NWS" , "NEE" , "NLSN" , "NKE" , "NI" , "NBL" , "NSC" , "NTRS" , "NOC" , "NLOK" , "NCLH" , "NRG" , "NUE" , "NVDA" , "NVR" , "ORLY" , "OXY" , "ODFL" , "OMC" , "OKE" , "ORCL" , "OTIS" , "PCAR" , "PKG" , "PH" , "PAYX" , "PAYC" , "PYPL" , "PNR" , "PBCT" , "PEP" , "PKI" , "PRGO" , "PFE" , "PM" , "PSX" , "PNW" , "PXD" , "PNC" , "PPG" , "PPL" , "PFG" , "PG" , "PGR" , "PLD" , "PRU" , "PEG" , "PSA" , "PHM" , "PVH" , "QRVO" , "QCOM" , "PWR" , "DGX" , "RL" , "RJF" , "RTX" , "O" , "REG" , "REGN" , "RF" , "RSG" , "RMD" , "RHI" , "ROK" , "ROL" , "ROP" , "ROST" , "RCL" , "SPGI" , "CRM" , "SBAC" , "SLB" , "STX" , "SEE" , "SRE" , "NOW" , "SHW" , "SPG" , "SWKS" , "SLG" , "SNA" , "SO" , "LUV" , "SWK" , "SBUX" , "STT" , "STE" , "SYK" , "SIVB" , "SYF" , "SNPS" , "SYY" , "TMUS" , "TROW" , "TTWO" , "TPR" , "TGT" , "TEL" , "FTI" , "TDY" , "TFX" , "TXN" , "TXT" , "BK" , "CLX" , "COO" , "HSY" , "MOS" , "TRV" , "DIS" , "TMO" , "TIF" , "TJX" , "TSCO" , "TT" , "TDG" , "TFC" , "TWTR" , "TYL" , "TSN" , "USB" , "UDR" , "ULTA" , "UAA" , "UA" , "UNP" , "UAL" , "UNH" , "UPS" , "URI" , "UHS" , "UNM" , "VLO" , "VAR" , "VTR" , "VRSN" , "VRSK" , "VZ" , "VRTX" , "VFC" , "VIAC" , "V" , "VNO" , "VMC" , "WRB" , "WAB" , "WBA" , "WMT" , "WM" , "WAT" , "WEC" , "WFC" , "WELL" , "WST" , "WDC" , "WU" , "WRK" , "WY" , "WHR" , "WMB" , "WLTW" , "WYNN" , "XEL" , "XRX" , "XLNX" 
+                , "XYL" , "YUM" , "ZBRA" , "ZBH" , "ZION" , "ZTS"]
 
-# Build absolute paths to the CSV files
-PCA_PREDICTED_PATH = os.path.join(THIS_DIR, 'PCA_Predicted_Prices1.csv')
-PCA_ACTUAL_PATH = os.path.join(THIS_DIR, 'PCA_Actual_Prices1.csv')
+scl = MinMaxScaler()
 
-PCA_Predicted_Prices = pd.read_csv(PCA_PREDICTED_PATH)
-PCA_Predicted_Prices['Date'] = pd.to_datetime(PCA_Predicted_Prices['Date'])
-PCA_Predicted_Prices = PCA_Predicted_Prices.set_index('Date')
+def create_df(horizon):
+    
+    num_days=252+10*horizon
+    if num_days<=1000:
+        num_days=1000
+    end_date = datetime.today()
+    start_date = end_date - timedelta(days=num_days)
 
-PCA_Actual_Prices = pd.read_csv(PCA_ACTUAL_PATH)
-PCA_Actual_Prices['Date'] = pd.to_datetime(PCA_Actual_Prices['Date'])
-PCA_Actual_Prices = PCA_Actual_Prices.set_index('Date')
-PCA_Predicted_Returns = PCA_Predicted_Prices.apply(lambda x: np.log(x) - np.log(x.shift(1))).iloc[1:]
-PCA_Actual_Returns = PCA_Actual_Prices.apply(lambda x: np.log(x) - np.log(x.shift(1))).iloc[1:]
+    all_data = []
+
+    for stock in stock_list:
+        print(f"Fetching data for {stock}...")
+        try:
+            df = yf.download(stock, start=start_date, end=end_date, progress=False)
+
+            if not df.empty:
+                df.reset_index(inplace=True) 
+                all_data.append(df) 
+            else:
+                print(f"Warning: No data found for {stock}")
+
+        except Exception as e:
+            print(f"Could not retrieve data for {stock}: {e}")
+    if all_data:
+        master_df = pd.concat(all_data, axis=1)
+        master_df.rename(columns={"Date": "Date", "Open": "Open", "High": "High", "Low": "Low",
+                                "Close": "Close", "Volume": "Volume", "Adj Close": "Adjusted"}, inplace=True)
+        
+        return master_df
+    else:
+        print("No valid stock data found.")
+        return pd.DataFrame()
+
+def preprocess_data(df):
+    df = df.drop(columns=[col for col in df.columns if col[1] == 'Date' and col != ('', 'Date')])
+    df.columns = pd.MultiIndex.from_tuples([('Date', '') if col[1] == 'Date' else (col[1], col[0]) for col in df.columns])
+
+    date_indices = [i for i, col in enumerate(df.columns) if col == ('', 'Date')]
+    date_cols = [col for col in df.columns if col == ('', 'Date')]
+    print(df.columns)
+    print(date_cols)
+    new_df = df[[date_cols[0]]]
+    new_df = df.iloc[:, :1]
+    
+    if len(date_indices) > 1:
+        cols_to_drop = [df.columns[i] for i in date_indices[1:]]
+        df = df.drop(columns=cols_to_drop)
+
+    df = pd.concat([new_df, df], axis=1)
+
+    stocks_to_remove = [
+        "ABBV", "ALLE", "AMCR", "AAL", "AWK", "AMP", "APTV", "ANET", "AVGO", "BR",
+        "CARR", "CBOE", "CDW", "CF", "CHTR", "CMG", "CFG", "CTVA", "COTY", "DAL",
+        "FANG", "DFS", "DG", "DOW", "FTV", "FOXA", "FOX", "GM", "HBI", "HCA",
+        "HPE", "HLT", "HWM", "HII", "INFO", "IR", "ICE", "IPGP", "IQV", "KEYS",
+        "KMI", "KHC", "LB", "LW", "LDOS", "LYV", "LYB", "MPC", "MA", "MSCI",
+        "NWSA", "NWS", "NCLH", "OTIS", "PAYC", "PYPL", "PM", "PSX", "QRVO", "NOW",
+        "SYF", "TEL", "TDG", "ULTA", "UA", "UAL", "VRSK", "V", "WU", "XYL", "ZTS"
+    ]
+    df = df.drop(columns=stocks_to_remove, level=0)
+
+    stock_symbols = df.columns.get_level_values(0).unique()
+    if "" in stock_symbols:
+        stock_symbols = stock_symbols.drop("")
+
+    for stock in stock_symbols:
+        # Daily Return
+        df[(stock, 'DailyRet')] = df[(stock, 'Close')].pct_change()
+
+        # 20 Day Return
+        df[(stock, '20DayRet')] = df[(stock, 'Close')].pct_change(20)
+
+        # 20 Day Volatility (std of DailyRet over 20 days)
+        df[(stock, '20DayVol')] = df[(stock, 'DailyRet')].rolling(window=20).std(ddof=0)
+
+        # Z-normalized 20 Day Return
+        rolling_ret = df[(stock, '20DayRet')].rolling(window=252)
+        df[(stock, 'Z20DayRet')] = (
+            (rolling_ret.mean().shift(1) - df[(stock, '20DayRet')]) / rolling_ret.std(ddof=0).shift(1)
+        )
+
+        # Z-normalized 20 Day Volatility
+        rolling_vol = df[(stock, '20DayVol')].rolling(window=252)
+        df[(stock, 'Z20DayVol')] = (
+            (rolling_vol.mean().shift(1) - df[(stock, '20DayVol')]) / rolling_vol.std(ddof=0).shift(1)
+        )
+
+    stock_symbols = sorted([col for col in df.columns.get_level_values(0).unique() if col != ''])
+
+    desired_metrics = ['Close', 'High', 'Low', 'Open', 'Volume',
+                    'DailyRet', '20DayRet', '20DayVol', 'Z20DayRet', 'Z20DayVol']
+
+    new_columns = [('', 'Date')]
+    for stock in stock_symbols:
+        for metric in desired_metrics:
+            if (stock, metric) in df.columns:
+                new_columns.append((stock, metric))
+
+    df = df.loc[:, new_columns]
+
+    full_feature_dataset = df.dropna(axis=0)
+
+    return full_feature_dataset,stock_symbols
+
+def closingPrices(df):
+  stock_symbols = df.columns.get_level_values(0).unique()
+  if "" in stock_symbols:
+        stock_symbols = stock_symbols.drop("")
+  close_columns = [(stock, 'Close') for stock in stock_symbols]
+  close_columns = [('', 'Date')] + close_columns
+  
+  df_close = df[close_columns].copy()
+  new_columns = ['Date'] + list(stock_symbols)
+  df_close.columns = new_columns
+  dates = df_close['Date'].copy()
+  df_close = df_close.drop(columns=[('Date')])  
+  
+  return df_close,dates
+
+def processData(data, lookback,jump):
+    X= []
+    for i in range(0,len(data) -lookback +1, jump):
+        X.append(data[i:(i+lookback)])
+    return np.array(X)
+
+def prepare_data(dataset,closing_prices,num_stocks):
+    pca = PCA(n_components = num_stocks)
+    train_scl=MinMaxScaler()
+
+    closing_prices= scl.fit_transform(closing_prices)
+
+    dataset = train_scl.fit_transform(dataset)
+    dataset = pca.fit_transform(dataset)
+
+    return dataset
+
+def do_inverse_transform(output_result,num_companies):
+    original_matrix_format = []
+    for result in output_result:
+        original_matrix_format.append(scl.inverse_transform([result[x:x+num_companies] for x in range(0, len(result), num_companies)]))
+    original_matrix_format = np.array(original_matrix_format)
+
+    for i in range(len(original_matrix_format)):
+        output_result[i] = original_matrix_format[i].ravel()
+
+    return output_result
+
+def prediction_by_step_by_company(raw_model_output, num_companies):
+    matrix_prediction = []
+    for i in range(0,num_companies):
+        matrix_prediction.append([[lista[j] for j in range(i,len(lista),num_companies)] for lista in raw_model_output])
+    return np.array(matrix_prediction)
 
 def mean_returns(df, length):
-    return df.sum(axis=0) / length
+    mu = df.sum(axis=0)/length
+    return mu
 
-def monthdelta(date, delta):
-    m, y = (date.month + delta) % 12, date.year + ((date.month) + delta - 1) // 12
-    if not m:
-        m = 12
-    d = min(date.day, [31, 29 if y % 4 == 0 and not y % 400 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1])
-    new_date = date.replace(day=d, month=m, year=y)
-    return parse(new_date.strftime('%Y-%m-%d'))
+from scipy.optimize import minimize
 
-def windowGenerator(dataframe, lookback, horizon, step, cummulative=False):
-    if cummulative:
-        c = lookback
-        step = horizon
-    initial = min(dataframe.index)
-    windows = []
-    horizons = []
-    while initial <= monthdelta(max(dataframe.index), -lookback):
-        windowStart = initial
-        windowEnd = monthdelta(windowStart, lookback)
-        if cummulative:
-            windowStart = min(dataframe.index)
-            windowEnd = monthdelta(windowStart, c) + timedelta(days=1)
-            c += horizon
-        horizonStart = windowEnd + timedelta(days=1)
-        horizonEnd = monthdelta(horizonStart, horizon)
-        windows.append(dataframe[windowStart:windowEnd])
-        horizons.append(dataframe[horizonStart:horizonEnd])
-        initial = monthdelta(initial, step)
-    return windows, horizons
+def get_ret_vol_sr(weights, log_return): 
+    weights = np.array(weights)
+    ret = np.sum(log_return.mean() * weights) * 252
+    vol = np.sqrt(np.dot(weights.T, np.dot(log_return.cov() * 252, weights)))
+    sr = ret / vol
+    return np.array([ret, vol, sr])
 
-def actual_return(actual_returns, w):
-    mu = mean_returns(actual_returns, actual_returns.shape[0])
-    cov = actual_returns.cov()
-    port_return = mu.T.dot(w)
-    port_variance = w.T.dot(cov).dot(w)
-    return port_return, port_variance
+def neg_sharpe(weights, log_return): 
+    return -get_ret_vol_sr(weights, log_return)[2]
 
-def scipy_opt(predicted_returns, actual_returns, lam1, lam2):
-    mu = mean_returns(predicted_returns, predicted_returns.shape[0])
-    cov = predicted_returns.cov()
-    def objective(w):
-        return -(mu.T.dot(w) - lam1 * (w.T.dot(cov).dot(w)) + lam2 * norm(w, ord=1))
-    bounds = Bounds(0, 1)
-    constraints = [{'type': 'eq', 'fun': lambda w: sum(w) - 1}]
-    sol = minimize(objective,
-                   x0=np.ones(mu.shape[0]),
-                   constraints=constraints,
-                   bounds=bounds,
-                   options={'disp': False},
-                   tol=1e-9)
-    w = sol.x
-    predicted_port_return = w.dot(mu)
-    portfolio_std = w.T.dot(cov).dot(w)
-    actual_port_return, actual_port_variance = actual_return(actual_returns, w)
-    sharpe_ratio = actual_port_return / np.sqrt(actual_port_variance)
-    return {
-        'weights': w,
-        'predicted_returns': predicted_port_return,
-        'predicted_variance': portfolio_std,
-        'actual_returns': actual_port_return,
-        'actual_variance': actual_port_variance,
-        'sharpe_ratio': sharpe_ratio
-    }
+def check_sum(weights): 
+    return np.sum(weights) - 1
 
-def metrics(returns_series):
-    sharpe = returns_series.mean() / returns_series.std() if returns_series.std() != 0 else 0
-    annualized_sharpe = sharpe * math.sqrt(252)
-    annualized_return = returns_series.mean() * 252
-    annualized_vol = returns_series.std() * math.sqrt(252)
-    max_drawdown = (returns_series.cumsum() - returns_series.cumsum().cummax()).min()
-    return {
-        "Annualized Return": round(annualized_return, 4),
-        "Annualized Volatility": round(annualized_vol, 4),
-        "Annualized Sharpe Ratio": round(annualized_sharpe, 4),
-        "Maximum Drawdown": round(max_drawdown, 4)
-    }
+def optimize(log_return,num_companies):
+    
+    cons = ({'type': 'eq', 'fun': check_sum})
+    bounds = tuple((0, 1) for _ in range(num_companies))
+    init_guess = [1.0 / num_companies] * num_companies  
+    
+    opt_results = minimize(neg_sharpe, init_guess, args=(log_return,), method='SLSQP', bounds=bounds, constraints=cons)
+    
+    return opt_results
 
-def plot_equity_curve(equity_series, timestamps):
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(timestamps, equity_series)
-    ax.set_title("Portfolio Equity Growth Over Time")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Equity ($)")
-    ax.grid(alpha=0.3)
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=100)
-    buf.seek(0)
-    img_bytes = buf.read()
-    buf.close()
-    plt.close(fig)
-    return base64.b64encode(img_bytes).decode()
+model_path = os.path.join(os.path.dirname(__file__), "final_model.keras")
+model = keras.models.load_model(model_path)
 
-# New function: GARCH for volatility prediction
-def forecast_portfolio_volatility(prices_df, weights_dict):
-    """
-    Forecast portfolio volatility using GARCH model.
+# @app.route('/predict-live', methods=['POST'])
+def predict_prices(horizon, initial_equity, selected_stocks=None):
     
-    Args:
-        prices_df: DataFrame of asset prices
-        weights_dict: Dictionary mapping asset names to weights
-        
-    Returns:
-        Dict with portfolio volatility and individual asset volatilities
-    """
-    try:
-        # Filter for assets in weights dictionary
-        tickers = [t for t in weights_dict.keys() if t in prices_df.columns]
-        price_df = prices_df[tickers].copy()
-        
-        # Calculate log returns
-        log_returns = np.log(price_df / price_df.shift(1)).dropna()
-        
-        # Normalize weights
-        total_weight = sum(weights_dict[t] for t in tickers)
-        weight_vector = np.array([weights_dict[t] / total_weight for t in tickers])
-        
-        # GARCH forecast for each ticker
-        forecasted_vols = []
-        individual_vols = {}
-        
-        for i, ticker in enumerate(tickers):
-            returns = log_returns[ticker] * 100  # GARCH works better with percentage scale
-            model = arch_model(returns, vol='GARCH', p=1, q=1)  # Simplified p,q parameters
-            res = model.fit(disp='off')
-            forecast = res.forecast(horizon=1)
-            sigma = np.sqrt(forecast.variance.values[-1][0]) / 100  # Back to raw scale
-            forecasted_vols.append(sigma)
-            individual_vols[ticker] = sigma
-        
-        # Correlation matrix from historical returns
-        correlation_matrix = log_returns.corr().values
-        
-        # Construct forecasted covariance matrix
-        forecasted_vol_matrix = np.outer(forecasted_vols, forecasted_vols)
-        forecasted_cov_matrix = forecasted_vol_matrix * correlation_matrix
-        
-        # Calculate portfolio volatility
-        portfolio_variance = weight_vector.T @ forecasted_cov_matrix @ weight_vector
-        portfolio_volatility = np.sqrt(portfolio_variance)
-        
-        return {
-            "portfolio_volatility": portfolio_volatility,
-            "individual_vols": individual_vols
-        }
-    except Exception as e:
-        print(f"Error in forecast_portfolio_volatility: {str(e)}")
-        return {
-            "portfolio_volatility": None,
-            "individual_vols": {}
-        }
+    df=create_df(horizon)
+    print("hayyy")
+    full_feature_dataset,stocks=preprocess_data(df)
+    print(full_feature_dataset.shape)
+    print("1")
+    num_companies=len(stocks)
+    print(num_companies)
+    print("2")
+    df_close,dates=closingPrices(full_feature_dataset)
+    full_feature_dataset = full_feature_dataset.drop(columns=[('', 'Date')])
+    full_feature_dataset = full_feature_dataset.to_numpy()
 
-def predict_portfolio(lookback, horizon, initial_equity, tickers=None):
-    """
-    Predict portfolio performance.
+    print("dates", dates)
+    print("3")
+    stocks=df_close.columns
+    df_close=df_close.dropna(axis=0)
+    closing_prices = df_close.iloc[:full_feature_dataset.shape[0],:]
+    num_companies = df_close.shape[1]
+    print("4")
+    dataset = prepare_data(full_feature_dataset,closing_prices,num_companies)
+    print(dataset.shape)
+
+    X = processData(dataset, 252, 22)
+    print("X.shape", X.shape)     
     
-    Args:
-        lookback: Lookback period in months
-        horizon: Forecast horizon in months
-        initial_equity: Initial portfolio value
-        tickers: List of tickers to include (filters the universe)
+    total_predictions=None
+    c=0
+    print("5")
+    print(horizon)
+    while horizon > 0:
+        print("entered")
+        Xt = model.predict(X) 
+        print("horizon",horizon)
+
+        print(Xt.shape)
+        Xt = do_inverse_transform(Xt, num_companies)
         
-    Returns:
-        Dict with portfolio metrics and forecasts
-    """
-    if lookback <= 0 or horizon <= 0 or initial_equity <= 0:
-        raise ValueError("Parameters must be positive values")
-    
-    # Filter the data for selected tickers if provided
-    if tickers and len(tickers) > 0:
-        filtered_predicted_returns = PCA_Predicted_Returns[tickers]
-        filtered_actual_returns = PCA_Actual_Returns[tickers]
-    else:
-        filtered_predicted_returns = PCA_Predicted_Returns
-        filtered_actual_returns = PCA_Actual_Returns
-    
-    pred_windows, pred_horizons = windowGenerator(filtered_predicted_returns, lookback, 1, 1)
-    act_windows, act_horizons = windowGenerator(filtered_actual_returns, lookback, 1, 1)
-    
-    if len(act_horizons) < horizon:
-        raise ValueError(f"Not enough data for the specified horizon. Maximum horizon available is: {len(act_horizons)}")
-    
-    start = len(act_horizons) - horizon
-    returns, variance, sharperatio, timestamps, equity = [], [], [], [], [initial_equity]
-    weights_history = []
-    
-    for i in range(start, start + horizon):
-        r = scipy_opt(pred_horizons[i], act_horizons[i], 0.5, 2)
-        returns.append(r['actual_returns'])
-        variance.append(r['actual_variance'])
-        sharperatio.append(r['sharpe_ratio'])
-        timestamps.append(act_horizons[i].index[0])
-        equity.append(equity[-1] * math.exp(r['actual_returns']))
-        weights_history.append(r['weights'])
-        print(i, "complete")
-    
-    returns_series = pd.Series(returns)
-    performance_metrics = metrics(returns_series)
-    
-    # Create the equity curve graph
-    graph = plot_equity_curve(equity[1:], timestamps)
-    final_equity = equity[-1]
-    
-    # Get the asset names we're working with (filtered or all)
-    asset_names = filtered_actual_returns.columns.tolist()
-    
-    # Format the weights history
-    formatted_weights = []
-    for period_weights in weights_history:
-        period_dict = {}
-        for j, asset in enumerate(asset_names):
-            if period_weights[j] > 0.01:  # Only include significant weights
-                period_dict[asset] = round(period_weights[j] * 100, 2)
-        formatted_weights.append(period_dict)
-    
-    # Get the final weights dictionary for volatility forecasting
-    final_weights_dict = {asset_names[j]: weights_history[-1][j] for j in range(len(asset_names))}
-    
-    # Forecast volatility using GARCH if available
-    vol_forecast = None
-    try:
-        # Use the original price data for volatility forecasting
-        if tickers and len(tickers) > 0:
-            filtered_prices = PCA_Actual_Prices[tickers]
+        print(Xt.shape)
+        
+        predictions = prediction_by_step_by_company(Xt, num_companies)
+        print("predictions.shape ", predictions.shape)
+        last_prediction = predictions[:, -1:, :]
+        print("last_prediction.shape",last_prediction.shape)
+        
+        if total_predictions is None:
+            total_predictions = last_prediction
         else:
-            filtered_prices = PCA_Actual_Prices
+            total_predictions = np.concatenate((total_predictions, last_prediction), axis=2)
+
+        last_prediction = last_prediction.transpose(1, 2, 0)
+
+        first_sample = X[0] 
+        tail_samples = [X[i, -22:, :] for i in range(1, X.shape[0])]  
+        combined = np.concatenate([first_sample] + tail_samples, axis=0)
+
+        lastprediction_reshaped = last_prediction[0]  
+        final_combined = np.concatenate([combined, lastprediction_reshaped], axis=0) 
+
+        X=processData(final_combined,252,22)
+
+        print("final_combined.shape",final_combined.shape)
+        print("X.shape",X.shape)
+        
+        c=c+1
+        horizon=horizon-22
+
+    print("total_predictions.shape",total_predictions.shape)
             
-        vol_forecast = forecast_portfolio_volatility(filtered_prices, final_weights_dict)
-    except Exception as e:
-        print(f"Volatility forecasting error: {str(e)}")
+    predicted_prices = np.zeros((total_predictions.shape[1]*total_predictions.shape[2], 
+                            total_predictions.shape[0]))
+
+    for i in range(total_predictions.shape[0]):
+        counter = 0
+        for j in range(total_predictions.shape[1]):
+            for z in range(total_predictions.shape[2]):
+                predicted_prices[counter, i] = total_predictions[i, j, z]
+                counter += 1
+
+    print("dates",len(dates))
+    print("predicted_prices.shape[0]",predicted_prices.shape[0])
+
+    print("predicted_prices.shape",predicted_prices.shape)
+
+    predicted_dates = []
+
+    x = (len(dates) - 252) / 22
+    last_date_index = int(252 + 22 * x)
+    last_date = dates[last_date_index]
+
+    days=22*c
+    predicted_dates = [last_date + timedelta(days=i) for i in range(1, 1+days)]
+
+    predicted_prices_df = pd.DataFrame(data=predicted_prices, columns=stocks, index=predicted_dates)
+    predicted_prices_df = predicted_prices_df.reset_index().rename(columns={"index": "Date"})
+
+    print("predicted dates")
+    print(predicted_dates)
+
+    predicted_prices_df['Date'] = pd.to_datetime(predicted_prices_df['Date'])
+    predicted_prices_df = predicted_prices_df.set_index('Date')
+
+    print("reached yayyy")
+        
+    predicted_Returns = predicted_prices_df.apply(lambda x: np.log(x) - np.log(x.shift(1))).iloc[1:]
+
+    if not selected_stocks:
+        selected_stocks = predicted_prices_df.columns.tolist()
+    print("reached34")
+    Predicted_Returns = predicted_Returns[selected_stocks]
+
+    result=optimize(Predicted_Returns,num_companies)
+    weights=result.x
+    predicted_returns,predicted_volatilty,predicted_sharperatio=get_ret_vol_sr(weights,Predicted_Returns)
+
+    print("reached 45")
+    predicted_equity = initial_equity * math.exp(predicted_returns)
+
+    asset_names = selected_stocks
+    print("reached67")
     
-    result = {
-        'portfolio_returns': [round(r, 4) for r in returns],
-        'equity_growth': [round(e, 2) for e in equity[1:]],
-        'final_equity': round(final_equity, 2),
+    # formatted_weights = {asset_names[i]: round(weights[i] * 100, 2) for i in range(len(weights)) if weights[i] > 0.01}
+    formatted_weights = {asset_names[i]: round(weights[i] * 100, 2) for i in range(len(weights))}
+
+    result={
         'initial_equity': initial_equity,
-        'timestamps': [t.strftime('%Y-%m-%d') for t in timestamps],
-        'equity_plot_base64': graph,
-        'performance_metrics': performance_metrics,
-        'weights_history': formatted_weights,
-        'final_optimal_weights': {k: round(v*100, 2) for k, v in final_weights_dict.items() if v > 0.01}
+        'predicted_return': round(predicted_returns, 4),
+        'predicted_volatility': round(predicted_volatilty, 4),
+        'predicted_sharpe_ratio': round(predicted_sharperatio, 4),
+        'expected_equity': round(predicted_equity, 2),
+        'weights': formatted_weights
     }
-    
-    # Add volatility forecast if available
-    if vol_forecast and vol_forecast["portfolio_volatility"] is not None:
-        result['predicted_portfolio_volatility'] = round(vol_forecast["portfolio_volatility"] * 100, 4)  # As percentage
-        result['individual_volatilities'] = {k: round(v * 100, 4) for k, v in vol_forecast["individual_vols"].items()}  # As percentage
-    
+
     return result
+
+
+
+
