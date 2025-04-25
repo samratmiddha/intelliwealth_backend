@@ -8,7 +8,7 @@ IntelliWealth is a next-generation online platform that empowers **individual in
 ### 📊 Dynamic Asset Allocation
 - Allocates assets dynamically based on user-defined goals and real-time financial indicators.
 - Incorporates historical volatility and correlation analysis.
-- Utilizes LSTM models for accurate stock price predictions.
+- Utilizes **LSTM** models for accurate stock price predictions.
 
 ### 🔮 Predictive Market Analytics
 - Conducts sentiment analysis on financial tweets using advanced models like **FinBERT** and **LDA** to gauge market sentiment.
