@@ -3,3 +3,4 @@ __pycache__/
 docs/
 intelliwealth_env/
 venv/
+portfolios/final_model.keras
