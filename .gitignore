@@ -2,3 +2,5 @@ __pycache__/
 *.csv
 docs/
 intelliwealth_env/
+venv/
+portfolios/final_model.keras

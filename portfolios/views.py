@@ -1,13 +1,17 @@
+from datetime import datetime ,timedelta
+from analytics.models import PredictionJob
+from intelliwealth_backend.tasks import predict_portfolio_task
 from rest_framework import viewsets, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+import yfinance as yf
 
 from .models import Portfolio, PortfolioAsset, PortfolioMetrics
 from .serializers import PortfolioSerializer, PortfolioAssetSerializer, PortfolioMetricsSerializer
-from .utils import predict_portfolio
+from .utils import predict_prices
+from users.models import ClientProfile
 
 from assets.models import Asset
-from portfolios.utils import PCA_Actual_Prices
 
 import json
 
@@ -35,30 +39,59 @@ class PortfolioMetricsViewSet(viewsets.ModelViewSet):
         portfolio = Portfolio.objects.filter(user=self.request.user).first()
         return PortfolioMetrics.objects.filter(portfolio=portfolio) if portfolio else PortfolioMetrics.objects.none()
 
-
 class PredictPortfolioView(APIView):
     def post(self, request, *args, **kwargs):
+        
         user = request.user
         data = request.data
 
-        # 1. Try to get the user's first portfolio, or create if not found
         portfolio = Portfolio.objects.filter(user=user).first()
         initial_equity = float(data.get('initial_equity', 100000))
-        lookback = int(data.get('lookback', 12))
         horizon = int(data.get('horizon', 6))
-        tickers = data.get('tickers')
+        selected_stocks = data.get('selected_stocks')
+        # risk_level=data.get('risk_level', 'medium')
+        # target_return=data.get('target_return', 0)
+        # notes=data.get('notes', ''),
+        # #client_assets=json.loads(user.client_profile.preferred_assets),
+        # name=user.username
+        # client_assets=None
+        # user_id=user.id
+        # try:
+        #     client_profile=ClientProfile.objects.get(user=user)
+        #     client_assets=json.loads(client_profile.preferred_assets)
+        # except:
+        #     pass
 
-        if not tickers and portfolio:
-            # If no tickers are provided, use the user's portfolio assets
-            tickers = [pa.asset.symbol for pa in portfolio.assets.all()]
+        # job = PredictionJob.objects.create(
+        #     portfolio=portfolio,
+        #     status='pending',
+        # )
 
-        if not tickers and not portfolio:
-            tickers = json.loads(user.client_profile.preferred_assets)
+        # predict_portfolio_task.delay(
+        #     user_id,
+        #     initial_equity,
+        #     horizon,
+        #     selected_stocks,
+        #     job.id,
+        #     risk_level,
+        #     target_return,
+        #     notes,
+        #     name,
+        #     client_assets
+            
+        # )
 
-      
-        if not tickers or not isinstance(tickers, list) or not tickers:
-            return Response({'error': 'Please provide a list of stock tickers.'}, status=400)
+        if not selected_stocks and portfolio:
+            # If no selected_stocks are provided, use the user's portfolio assets
+            selected_stocks = [pa.asset.symbol for pa in portfolio.assets.all()]
 
+        if not selected_stocks and not portfolio:
+            selected_stocks = json.loads(user.client_profile.preferred_assets)
+
+        # if not selected_stocks or not isinstance(selected_stocks, list) or not selected_stocks:
+        #     return Response({'error': 'Please provide a list of stock selected_stocks.'}, status=400)
+
+       
         if not portfolio:
             # Create a new portfolio
             portfolio = Portfolio.objects.create(
@@ -71,22 +104,33 @@ class PredictPortfolioView(APIView):
             )
             current_equity = initial_equity
         else:
-            # Calculate current equity based on current portfolio assets and latest prices
             current_equity = 0
-            latest_date = PCA_Actual_Prices.index.max()
-            for pa in portfolio.assets.all():
+            price_cache = {}
+
+            for pa in portfolio.assets.all(): 
+                symbol = pa.asset.symbol 
+
                 try:
-                    price = float(PCA_Actual_Prices.loc[latest_date, pa.asset.symbol])
-                except Exception:
-                    print("exception in PCA_Actual_Prices:", pa.asset.symbol)
+                    if symbol not in price_cache:
+                        stock = yf.Ticker(symbol)
+                        hist = stock.history(period="1d")
+                        price = float(hist['Close'][-1])
+                        price_cache[symbol] = price
+                    else:
+                        price = price_cache[symbol]
+                except Exception as e:
+                    print("Exception in yfinance for:", symbol, "| Error:", e)
                     price = float(pa.avg_buy_price)
+
                 current_equity += pa.quantity * price
+
             if current_equity == 0:
                 current_equity = initial_equity
 
+        print("yhuuu")
         # 2. Predict portfolio
         try:
-            prediction = predict_portfolio(lookback, horizon, current_equity, tickers)
+            prediction = predict_prices(horizon, current_equity, selected_stocks)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
@@ -95,12 +139,12 @@ class PredictPortfolioView(APIView):
 
         # 4. Determine buy date (first timestamp in prediction)
         try:
-            buy_date = prediction['timestamps'][0]
+            buy_date = (datetime.now() + timedelta(days=1)).date()
         except Exception:
             buy_date = None
 
         # 5. Create new PortfolioAsset entries with allocation, quantity, avg_buy_price
-        final_weights = prediction.get('final_optimal_weights', {})
+        final_weights = prediction.get('weights', {})
         for ticker, percent in final_weights.items():
             try:
                 asset = Asset.objects.get(symbol=ticker)
@@ -110,7 +154,9 @@ class PredictPortfolioView(APIView):
             allocation_percent = percent
             # Get buy price from PCA_Actual_Prices at buy_date
             try:
-                buy_price = float(PCA_Actual_Prices.loc[buy_date, ticker])
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="1d")
+                buy_price = float(hist['Close'][-1])
             except Exception:
                 buy_price = 0
 
@@ -130,14 +176,16 @@ class PredictPortfolioView(APIView):
         PortfolioMetrics.objects.filter(portfolio=portfolio).delete()
         PortfolioMetrics.objects.create(
             portfolio=portfolio,
-            roi=prediction['performance_metrics'].get('Annualized Return', 0),
-            sharpe_ratio=prediction['performance_metrics'].get('Annualized Sharpe Ratio', 0),
-            annulaized_volatility=prediction['performance_metrics'].get('Annualized Volatility', 0),
-            maximum_drawdown=prediction['performance_metrics'].get('Maximum Drawdown', 0),
-            final_equity=prediction.get('final_equity', 0)
+            roi=prediction['predicted_return'],
+            sharpe_ratio=prediction['predicted_sharpe_ratio'],
+            annulaized_volatility=prediction['predicted_volatility'],
+            final_equity=prediction.get('expected_equity', 0),
         )
-
+        
         return Response({
             'portfolio': portfolio.id,
             'prediction': prediction
         }, status=200)
+
+        # return Response({"message": "Prediction started", "job_id": job.id})
+    

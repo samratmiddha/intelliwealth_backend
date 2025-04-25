@@ -9,7 +9,7 @@ class PredictionJob(models.Model):
         ('completed', 'Completed'),
         ('failed', 'Failed'),
     ]
-
+    
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE, related_name='prediction_jobs')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     result = models.JSONField(null=True, blank=True)
